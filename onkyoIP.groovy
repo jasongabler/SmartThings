@@ -1,16 +1,48 @@
 /**
- *  Onkyo IP Control Device Type for SmartThings
- *  Allan Klein (@allanak)
- *  Originally based on: Mike Maxwell's code
+ *  Onkyo Volume
+ *  A SmartThings device handler to control the volume on Onkyo and later model Pioneer receivers
  *
- *  Usage:
- *  1. Be sure you have enabled control of the receiver via the network under the settings on your receiver.
- *  2. Add this code as a device handler in the SmartThings IDE
- *  3. Create a device using OnkyoIP as the device handler using a hexadecimal representation of IP:port as the device network ID value
- *  For example, a receiver at 192.168.1.222:60128 would have a device network ID of C0A801DE:EAE0
- *  Note: Port 60128 is the default Onkyo eISCP port so you shouldn't need to change anything after the colon
- *  4. Enjoy the new functionality of the SmartThings app
- * 
+ * =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-=-=
+ *
+ * Installation:
+ * - In the SmartThings IDE
+ *   1. Click "My Device Handlers" (at the very top)
+ *   2. Click "Create New Device Handler"
+ *   3. Click the "From Code" tab
+ *   4. Paste this entire code into the large text area
+ *   5. Click "Create"
+ *   6. Click "Publish"
+ *   7. Click "My Devices" (at the very top)
+ *   8. Click "New Device"
+ *   9. Set the Device Network Id to <IP address>:<port> in a hex string representation
+ *      where   <octet A decimal>.<octet B decimal>.<octet C decimal>.<octet D decimal>:<port decimal>
+ *      becomes <octet A hex><octet B hex><octet C hex><octet AD hex>:<port hex>
+ *      For example, 192.168.0.134:60128 becomes C0A80086:EAE0
+ *      Here's a handy converter: https://www.rapidtables.com/convert/number/decimal-to-hex.html
+ *  10. Set all other device settings as desired and save. The device will then show up as a device
+ *      within your SmartThings mobile app.
+ *
+ * =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-=-=
+ *
+ * Planned changes:
+ * - Enabled setting receiver IP address within the SmartThing devices settings in the mobile app.
+ * - Permit leaving out the port and default to 60128
+ * Known bugs:
+ * - Mobile app stalls after using slider and reverts to 0 (though volume remains set at desired change)
+ * - Mobible app slider does to reflect current receiver volume, whether changed by mobile app or
+ *   external manipulator
+ * Other Notes:
+ * - I have created this device handler using a Pioneer 2018 VSX-LX503. eISCP commands and the volume values
+ *   may differ between different models of Onkyo and later Pioneer receivers. 
+ * - Pioneer used to have an elegant, all ASCII command set which you could send to the receiver via
+ *   simple telnet/netcat. When Onkyo bought Pioneer, they shoved Onkyo's archaicly complex command
+ *   structure and processing into Pioneer receivers and bounced them back technologically by ten to
+ *   twenty years. This is why getEiscpMessage() creates such ridiculous messages.
+ *
+ * =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-=-=
+ *
+ *  Copyright 2020 Jason Gabler
+ *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
  *
@@ -20,211 +52,81 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- * Some future commands that might be useful to incorporate reading:
- * Power Status: PWRQSTN
- * Input Selected: SLIQSTN
- * Volume Level: MVLQSTN (value in hex)
- * Artist Name: NATQSTN
- * Track Name: NTIQSTN
- * Zone 2 Mute: ZMTQSTN
- * Zone 2 Volume: ZVLQSTN
- * Zone 2 Input Selected: SLZQSTN
- * ISCP commands were found at https://github.com/miracle2k/onkyo-eiscp/blob/master/eiscp-commands.yaml
+ *  This code is based upon a forked from Allan Klein's (@allanak) GitHub repo
  */
 
 metadata {
-	definition (name: "onkyoIP", namespace: "allanak", author: "Allan Klein") {
-	capability "Switch"
-	capability "Music Player"
-	command "cable"
-	command "stb"
-	command "pc"
-	command "net"
-	command "aux"
-	command "z2on"
-	command "z2off"
-	command "makeNetworkId", ["string","string"]
+	definition (name: "Onkyo Volume", namespace: "jasongabler", author: "Jason Gabler", cstHandler: true) {
+		capability "Audio Volume"
 	}
 
-simulator {
+
+	simulator {
 		// TODO: define status and reply messages here
 	}
 
-tiles {
-	standardTile("switch", "device.switch", width: 1, height: 1, canChangeIcon: true) {
-        	state "on", label: '${name}', action: "switch.off", icon: "st.switches.switch.on", backgroundColor: "#79b821"
-        	state "off", label: '${name}', action: "switch.on", icon: "st.switches.switch.off", backgroundColor: "#ffffff"
-   		}
-        standardTile("mute", "device.switch", inactiveLabel: false, decoration: "flat") {
-		state "unmuted", label:"mute", action:"mute", icon:"st.custom.sonos.unmuted", backgroundColor:"#ffffff", nextState:"muted"
-		state "muted", label:"unmute", action:"unmute", icon:"st.custom.sonos.muted", backgroundColor:"#ffffff", nextState:"unmuted"
-        	}
-        standardTile("cable", "device.switch", decoration: "flat"){
-        	state "cable", label: 'cable', action: "cable", icon:"st.Electronics.electronics3"
-        	}
-        standardTile("stb", "device.switch", decoration: "flat"){
-        	state "stb", label: 'shield', action: "stb", icon:"st.Electronics.electronics5"
-        	}
-        standardTile("pc", "device.switch", decoration: "flat"){
-        	state "pc", label: 'pc', action: "pc", icon:"st.Electronics.electronics18"
-        	}
-        standardTile("net", "device.switch", decoration: "flat"){
-        	state "net", label: 'net', action: "net", icon:"st.Electronics.electronics2"
-        	}
-        standardTile("aux", "device.switch", decoration: "flat"){
-        	state "aux", label: 'aux', action: "aux", icon:"st.Electronics.electronics6"
-        	}
-	controlTile("levelSliderControl", "device.level", "slider", height: 1, width: 2, inactiveLabel: false, range:"(0..70)") {
-		state "level", label:'${currentValue}', action:"setLevel", backgroundColor:"#ffffff"
-		}
-        standardTile("zone2", "device.switch", inactiveLabel: false, decoration: "flat") {
-		state "off", label:"Enable Zone 2", action:"z2on", icon:"st.custom.sonos.unmuted", backgroundColor:"#ffffff", nextState:"on"
-		state "on", label:"Disable Zone 2", action:"z2off", icon:"st.custom.sonos.muted", backgroundColor:"#ffffff", nextState:"off"
-        	}
-        /*   Commenting this out as it doesn't work yet     
-        valueTile("currentSong", "device.trackDescription", inactiveLabel: true, height:1, width:3, decoration: "flat") {
-		state "default", label:'${currentValue}', backgroundColor:"#ffffff"
-		}
-	*/
+	tiles {
+		// TODO: define your main and details tiles here
 	}
-
-	
-    main "switch"
-    details(["switch","mute","cable","stb","pc","net","aux","levelSliderControl","zone2"])
-    //Add currentSong to above once I can figure out how to get the QSTN commands parsed into artist/song titles
 }
 
 // parse events into attributes
-def parse(description) {
-    def msg = parseLanMessage(description)
-    def headersAsString = msg.header // => headers as a string
-    def headerMap = msg.headers      // => headers as a Map
-    def body = msg.body              // => request body as a string
-    def status = msg.status          // => http status code of the response
-    def json = msg.json              // => any JSON included in response body, as a data structure of lists and maps
-    def xml = msg.xml                // => any XML included in response body, as a document tree structure
-    def data = msg.data              // => either JSON or XML in response body (whichever is specified by content-type header in response)
+def parse(String description) {
+	log.debug "Parsing '${description}'"
+	// TODO: handle 'volume' attribute
+
 }
-//device.deviceNetworkId should be writeable now..., and its not...
-def makeNetworkId(ipaddr, port) { 
-	String hexIp = ipaddr.tokenize('.').collect {String.format('%02X', it.toInteger()) }.join() 
-	String hexPort = String.format('%04X', port.toInteger()) 
-	log.debug "The target device is configured as: ${hexIp}:${hexPort}" 
-	return "${hexIp}:${hexPort}" 
-	}
-def updated() {
-	//device.deviceNetworkId = makeNetworkId(settings.deviceIP,settings.devicePort)	
-	}
-def mute(){
-	log.debug "Muting receiver"
-	sendEvent(name: "switch", value: "muted")
-	def msg = getEiscpMessage("AMT01")
+
+// handle commands
+def setVolume(vol) {
+	log.debug "Executing 'setVolume'"
+    
+	if (vol < 0)
+    	vol = 0
+	else if( vol > 100)
+    	vol = 100
+    vol = vol * 2
+     
+    String volhex = String.format("%02x", (int)vol)
+    def msg = getEiscpMessage("MVL${volhex}")
+    log.debug "Setting volume to MVL${volhex} (${vol})"
+    
+    // sendEvent(name:"setLevel", value: vol)
+    def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN )
+    log.debug "HA:["+ha.toString()+"]"
+    
+    return ha
+}       
+    
+
+def volumeUp() {
+	def msg = getEiscpMessage("MVLUP")
+    log.debug "MVLUP: ${msg}";
 	def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN )
-	return ha
-	}
+	log.debug "HA:["+ha.toString()+"]"
+    return ha 
+}
 
-def unmute(){
-	log.debug "Unmuting receiver"
-	sendEvent(name: "switch", value: "unmuted")
-	def msg = getEiscpMessage("AMT00")
+def volumeDown() {
+	def msg = getEiscpMessage("MVLDOWN")
+    log.debug "MVLDOWN: ${msg}";
 	def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN )
-	return ha
-	}
+	 log.debug "HA:["+ha.toString()+"]"
+    return ha 
+}
 
-def setLevel(vol){
-	log.debug "Setting volume level $vol"
-	if (vol < 0) vol = 0
-	else if( vol > 70) vol = 70
-	else {
-		sendEvent(name:"setLevel", value: vol)
-		String volhex = vol.bytes.encodeHex()
-		// Strip the first six zeroes of the hex encoded value because we send volume as 2 digit hex
-		volhex = volhex.replaceFirst("\\u0030{6}","")
-		log.debug "Converted volume $vol into hex: $volhex"
-		def msg = getEiscpMessage("MVL${volhex}")
-		log.debug "Setting volume to MVL${volhex}"
-		def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN )
-		return ha
-		}
-	}
-
-def on() {
-	log.debug "Powering on receiver"
-	sendEvent(name: "switch", value: "on")
-	def msg = getEiscpMessage("PWR01")
-	def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN)
-	return ha
-	}
-
-def off() {
-	log.debug "Powering off receiver"
-	sendEvent(name: "switch", value: "off")
-	def msg = getEiscpMessage("PWR00")
-	def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN)
-	return ha
-	}
-
-def cable() {
-	log.debug "Setting input to Cable"
-	def msg = getEiscpMessage("SLI01")
-	def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN)
-	return ha
-	}
-
-def stb() {
-	log.debug "Setting input to STB"
-	def msg = getEiscpMessage("SLI02")
-	def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN)
-	return ha
-	}
-
-def pc() {
-	log.debug "Setting input to PC"
-	def msg = getEiscpMessage("SLI05")
-	def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN)
-	return ha
-	}
-
-def net() {
-	log.debug "Setting input to NET"
-	def msg = getEiscpMessage("SLI2B")
-	def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN)
-	log.debug "Pressing play"
-	def msg2 = getEiscpMessage("NSTpxx")
-	def ha2 = new physicalgraph.device.HubAction(msg2,physicalgraph.device.Protocol.LAN)    
-	return ha
-    return ha2
-	}
-
-def aux() {
-	log.debug "Setting input to AUX"
-	def msg = getEiscpMessage("SLI03")
-	def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN)
-	return ha
-	}
-def z2on() {
-	log.debug "Turning on Zone 2"
-	def msg = getEiscpMessage("ZPW01")
-	def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN)
-	return ha
-	}
-def z2off() {
-	log.debug "Turning off Zone 2"
-	def msg = getEiscpMessage("ZPW00")
-	def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN)
-	return ha
-	}
-
-
+/* 
+ * Build raw eISCP message to send to receiver. Some parts are copied in regular ASCII and some parts
+ * are converted to hex string representation.
+ */
 def getEiscpMessage(command){
 	def sb = StringBuilder.newInstance()
 	def eiscpDataSize = command.length() + 3  // this is the eISCP data size
-	def eiscpMsgSize = eiscpDataSize + 1 + 16  // this is the size of the entire eISCP msg
+	def eiscpMsgSize = eiscpDataSize + 1 + 16 // this is the size of the entire eISCP msg
 
-	/* This is where I construct the entire message
-        character by character. Each char is represented by a 2 disgit hex value */
+
+    // Begin with the prefix
 	sb.append("ISCP")
-	// the following are all in HEX representing one char
 
 	// 4 char Big Endian Header
 	sb.append((char)Integer.parseInt("00", 16))
@@ -236,13 +138,11 @@ def getEiscpMessage(command){
 	sb.append((char)Integer.parseInt("00", 16))
 	sb.append((char)Integer.parseInt("00", 16))
 	sb.append((char)Integer.parseInt("00", 16))
-	// the official ISCP docs say this is supposed to be just the data size  (eiscpDataSize)
-	// ** BUT **
-	// It only works if you send the size of the entire Message size (eiscpMsgSize)
-	// Changing eiscpMsgSize to eiscpDataSize for testing
+    
+	// Official ISCP documentation defined the next block the data size (stored in eiscpDataSize).
+    //sb.append((char)Integer.parseInt(Integer.toHexString(eiscpMsgSize), 16))
+	// However, it seems to only work if sending the size of the entire message (stored in eiscpMsgSize).
 	sb.append((char)Integer.parseInt(Integer.toHexString(eiscpDataSize), 16))
-	//sb.append((char)Integer.parseInt(Integer.toHexString(eiscpMsgSize), 16))
-
 
 	// eiscp_version = "01";
 	sb.append((char)Integer.parseInt("01", 16))
@@ -252,28 +152,40 @@ def getEiscpMessage(command){
 	sb.append((char)Integer.parseInt("00", 16))
 	sb.append((char)Integer.parseInt("00", 16))
 
-	//  eISCP data
-	// Start Character
+	// eISCP data: start character
 	sb.append("!")
 
-	// eISCP data - unittype char '1' is receiver
+	// eISCP data: unittype char '1' is the receiver
 	sb.append("1")
 
-	// eISCP data - 3 char command and param    ie PWR01
+	// eISCP data: the actual command string and param
+    // E.g. For "PWR01" the command is "PWR", immediately follow by "01"
 	sb.append(command)
 
-	// msg end - this can be a few different cahrs depending on you receiver
-	// my NR5008 works when I use  'EOF'
-	//OD is CR
-	//0A is LF
-	/*
-	[CR]			Carriage Return					ASCII Code 0x0D			
-	[LF]			Line Feed						ASCII Code 0x0A			
-	[EOF]			End of File						ASCII Code 0x1A			
-	*/
-	//works with cr or crlf
-	sb.append((char)Integer.parseInt("0D", 16)) //cr
-	//sb.append((char)Integer.parseInt("0A", 16))
+	// eISCP footer: can differ depending on the receiver model. 
+    // Carriage return (CR) seems to widely accepted.
+    // For reference, other possible values may be: CR is 0x0D, LF is 0x0A, EOF is 0x1A
+	sb.append((char)Integer.parseInt("0D", 16))
 
 	return sb.toString()
+}
+    
+
+/*
+ * Utility to convert a character string to a hex string of its bytes.
+ * It can be useful in printing the output from getEiscpMessage() to the debug log, and then taking
+ * that hex string and running it through netcat directly to the receiver. For example, the following
+ * command sents the output from this method to set the volumn to 52% on my receiver.
+ * $ echo "49534350000000100000000A0100000021314D564C5153544E0D" | xxd -r -p |  nc 192.168.0.134 60128  # MVL52
+ */
+def bytesToHex(str){
+    def bytes = str.getBytes();
+    def HEX_ARRAY = "0123456789ABCDEF".toCharArray();
+    def hexChars = new char[bytes.length * 2];
+    for (int j = 0; j < bytes.length; j++) {
+        int v = bytes[j] & 0xFF;
+        hexChars[j * 2] = HEX_ARRAY[v >>> 4];
+        hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
+    }
+    return new String(hexChars);
 	}
