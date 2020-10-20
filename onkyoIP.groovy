@@ -1,5 +1,5 @@
 /**
- *  Onkyo Volume
+ *  Onkyo Receiver
  *
  *  A SmartThings device handler to control the volume on Onkyo and later model Pioneer receivers
  *
@@ -57,7 +57,7 @@
  */
 
 metadata {
-	definition (name: "Onkyo Volume", namespace: "jasongabler", author: "Jason Gabler", cstHandler: true) {
+	definition (name: "Onkyo Receiver", namespace: "jasongabler", author: "Jason Gabler", cstHandler: true) {
 		capability "Audio Volume"
 	}
 
