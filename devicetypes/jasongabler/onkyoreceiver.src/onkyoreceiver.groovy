@@ -75,7 +75,6 @@ metadata {
                 attributeState "VALUE_DOWN", action: "volumeDown"
             }
         }
-
         main("levelSliderControl")
         details(["levelSliderControl","actionFlat"])
     }
@@ -86,18 +85,17 @@ def parse(description) {
     log.debug "Parsing '${description}'"
     //return createEvent(name: "volume", value: "${currentVolume}")
     def volume = device.currentValue("volume")
-    log.debug "volume: ${volume}"
+    log.debug "parse() volume: ${volume}"
     sendEvent(name:"volume", value: "${volume}")
 }
 
 // handle commands
 def setVolume(volume) {
-    if (volume < 0)	volume = 0
+    if (volume < 0)    volume = 0
     if( volume > 100) volume = 100
 
     String volhex = String.format("%02x", (int)(volume*2))
     def result = sendMsg("MVL${volhex}")
-    sendEvent(name:"volume", value: (volume))
     return result
 }       
 
@@ -117,7 +115,7 @@ def sendMsg(rawMsg) {
     def msg = getEiscpMessage(rawMsg)
     def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN )
     log.debug "HubAction: ["+ha.toString()+"]"
-	sendEvent(name:"volume", value: volume)
+    sendEvent(name:"volume", value: (volume))
     log.debug "sendEvent: ["+ha.toString()+"]"
     return ha
 }
@@ -127,54 +125,54 @@ def sendMsg(rawMsg) {
  * are converted to hex string representation.
  */
 def getEiscpMessage(command){
-	def sb = StringBuilder.newInstance()
-	def eiscpDataSize = command.length() + 3  // this is the eISCP data size
-	def eiscpMsgSize = eiscpDataSize + 1 + 16 // this is the size of the entire eISCP msg
+    def sb = StringBuilder.newInstance()
+    def eiscpDataSize = command.length() + 3  // this is the eISCP data size
+    def eiscpMsgSize = eiscpDataSize + 1 + 16 // this is the size of the entire eISCP msg
 
 
     // Begin with the prefix
-	sb.append("ISCP")
+    sb.append("ISCP")
 
-	// 4 char Big Endian Header
-	sb.append((char)Integer.parseInt("00", 16))
-	sb.append((char)Integer.parseInt("00", 16))
-	sb.append((char)Integer.parseInt("00", 16))
-	sb.append((char)Integer.parseInt("10", 16))
+    // 4 char Big Endian Header
+    sb.append((char)Integer.parseInt("00", 16))
+    sb.append((char)Integer.parseInt("00", 16))
+    sb.append((char)Integer.parseInt("00", 16))
+    sb.append((char)Integer.parseInt("10", 16))
 
-	// 4 char  Big Endian data size
-	sb.append((char)Integer.parseInt("00", 16))
-	sb.append((char)Integer.parseInt("00", 16))
-	sb.append((char)Integer.parseInt("00", 16))
+    // 4 char  Big Endian data size
+    sb.append((char)Integer.parseInt("00", 16))
+    sb.append((char)Integer.parseInt("00", 16))
+    sb.append((char)Integer.parseInt("00", 16))
     
-	// Official ISCP documentation defined the next block the data size (stored in eiscpDataSize).
+    // Official ISCP documentation defined the next block the data size (stored in eiscpDataSize).
     //sb.append((char)Integer.parseInt(Integer.toHexString(eiscpMsgSize), 16))
-	// However, it seems to only work if sending the size of the entire message (stored in eiscpMsgSize).
-	sb.append((char)Integer.parseInt(Integer.toHexString(eiscpDataSize), 16))
+    // However, it seems to only work if sending the size of the entire message (stored in eiscpMsgSize).
+    sb.append((char)Integer.parseInt(Integer.toHexString(eiscpDataSize), 16))
 
-	// eiscp_version = "01";
-	sb.append((char)Integer.parseInt("01", 16))
+    // eiscp_version = "01";
+    sb.append((char)Integer.parseInt("01", 16))
 
-	// 3 chars reserved = "00"+"00"+"00";
-	sb.append((char)Integer.parseInt("00", 16))
-	sb.append((char)Integer.parseInt("00", 16))
-	sb.append((char)Integer.parseInt("00", 16))
+    // 3 chars reserved = "00"+"00"+"00";
+    sb.append((char)Integer.parseInt("00", 16))
+    sb.append((char)Integer.parseInt("00", 16))
+    sb.append((char)Integer.parseInt("00", 16))
 
-	// eISCP data: start character
-	sb.append("!")
+    // eISCP data: start character
+    sb.append("!")
 
-	// eISCP data: unittype char '1' is the receiver
-	sb.append("1")
+    // eISCP data: unittype char '1' is the receiver
+    sb.append("1")
 
-	// eISCP data: the actual command string and param
+    // eISCP data: the actual command string and param
     // E.g. For "PWR01" the command is "PWR", immediately follow by "01"
-	sb.append(command)
+    sb.append(command)
 
-	// eISCP footer: can differ depending on the receiver model. 
+    // eISCP footer: can differ depending on the receiver model. 
     // Carriage return (CR) seems to widely accepted.
     // For reference, other possible values may be: CR is 0x0D, LF is 0x0A, EOF is 0x1A
-	sb.append((char)Integer.parseInt("0D", 16))
+    sb.append((char)Integer.parseInt("0D", 16))
 
-	return sb.toString()
+    return sb.toString()
 }
     
 
