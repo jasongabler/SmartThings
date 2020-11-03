@@ -57,59 +57,58 @@
  */
 
 metadata {
-	definition (name: "OnkyoReceiver", namespace: "jasongabler", author: "Jason Gabler", cstHandler: true) {
-		capability "Audio Volume"
-	}
+    definition (name: "OnkyoReceiver", namespace: "jasongabler", author: "Jason Gabler", cstHandler: true) {
+        capability "Audio Volume"
+    }
 
+    simulator {
+        // TODO: define status and reply messages here
+    }
 
-	simulator {
-		// TODO: define status and reply messages here
-	}
-
-	tiles {
-		controlTile("levelSliderControl", "device.volume", "slider", height: 1, width: 2) {
-		    state "${currentValue}", action:"switch level.setLevel"
-		}        
+    tiles {
+        controlTile("levelSliderControl", "device.volume", "slider", height: 1, width: 2) {
+            state "${currentValue}", action:"switch level.setLevel"
+        }        
         standardTile("actionFlat", "device.volume", width: 2, height: 2, decoration: "flat") {
             tileAttribute("device.volume", key: "VALUE_CONTROL") {
                 attributeState "VALUE_UP", action: "volumeUp"
                 attributeState "VALUE_DOWN", action: "volumeDown"
             }
         }
-		main("levelSliderControl")
-        details(["levelSliderControl","actionFlat"])
 
-	}
+        main("levelSliderControl")
+        details(["levelSliderControl","actionFlat"])
+    }
 }
 
 
 def parse(description) {
-	log.debug "Parsing '${description}'"
-	//return createEvent(name: "volume", value: "${currentVolume}")
-  	def volume = device.currentValue("volume")
-	log.debug "volume: ${volume}"
+    log.debug "Parsing '${description}'"
+    //return createEvent(name: "volume", value: "${currentVolume}")
+    def volume = device.currentValue("volume")
+    log.debug "volume: ${volume}"
     sendEvent(name:"volume", value: "${volume}")
 }
 
 // handle commands
 def setVolume(volume) {
-	if (volume < 0)	volume = 0
-	if( volume > 100) volume = 100
-     
+    if (volume < 0)	volume = 0
+    if( volume > 100) volume = 100
+
     String volhex = String.format("%02x", (int)(volume*2))
-	def result = sendMsg("MVL${volhex}")
-	sendEvent(name:"volume", value: (volume))
+    def result = sendMsg("MVL${volhex}")
+    sendEvent(name:"volume", value: (volume))
     return result
 }       
-    
+
 
 def volumeUp() {
-	return sendMsg("MVLUP")
+    return sendMsg("MVLUP")
 }
 
 
 def volumeDown() {
-	return sendMsg("MVLDOWN")
+    return sendMsg("MVLDOWN")
 }
 
 
@@ -196,4 +195,4 @@ def bytesToHex(str){
         hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
     }
     return new String(hexChars);
-	}
+}
