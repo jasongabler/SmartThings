@@ -67,7 +67,7 @@ metadata {
 
     tiles {
         controlTile("levelSliderControl", "device.volume", "slider", height: 1, width: 2) {
-            state "${currentValue}", action:"switch level.setLevel"
+            state "${currentValue}", action:"switch level.setLevel", range:"(10..20)"
         }        
         standardTile("actionFlat", "device.volume", width: 2, height: 2, decoration: "flat") {
             tileAttribute("device.volume", key: "VALUE_CONTROL") {
@@ -91,11 +91,13 @@ def parse(description) {
 
 // handle commands
 def setVolume(volume) {
+    log.debug("Raw vol: "+volume)
     if (volume < 0)    volume = 0
-    if( volume > 100) volume = 100
+    if( volume > 100) volume = 50 // safety valve
 
     String volhex = String.format("%02x", (int)(volume*2))
     def result = sendMsg("MVL${volhex}")
+    sendEvent(name:"volume", value: (volume))
     return result
 }       
 
@@ -115,8 +117,6 @@ def sendMsg(rawMsg) {
     def msg = getEiscpMessage(rawMsg)
     def ha = new physicalgraph.device.HubAction(msg,physicalgraph.device.Protocol.LAN )
     log.debug "HubAction: ["+ha.toString()+"]"
-    sendEvent(name:"volume", value: (volume))
-    log.debug "sendEvent: ["+ha.toString()+"]"
     return ha
 }
 
